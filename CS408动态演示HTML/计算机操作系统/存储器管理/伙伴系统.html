@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>伙伴系统交互式演示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        .memory-block {
+            transition: all 0.5s ease-in-out;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        .log-message {
+            transition: background-color 0.5s ease;
+        }
+        .log-message.new {
+            background-color: #fefcbf; /* yellow-100 */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">伙伴系统 (Buddy System) 交互式演示</h1>
+            <p class="mt-2 text-gray-600">可视化内存的分配与回收过程</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column: Controls and Allocated Blocks -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Controls -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-bold mb-4 border-b pb-2">控制面板</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="alloc-size" class="block text-sm font-medium text-gray-700">请求内存大小 (KB):</label>
+                            <input type="number" id="alloc-size" value="70" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <button id="alloc-btn" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                            分配内存
+                        </button>
+                        <button id="reset-btn" class="w-full bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors">
+                            重置系统
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Allocated Blocks -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-bold mb-4 border-b pb-2">已分配的块</h2>
+                    <div id="allocated-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                        <p class="text-gray-500">暂无已分配的块。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Visualization and Logs -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Memory Visualization -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-bold mb-4">内存视图 (总大小: <span id="total-mem-size"></span> KB)</h2>
+                    <div id="memory-container" class="w-full h-48 md:h-64 bg-gray-100 rounded-lg flex flex-wrap content-start p-1 border">
+                        <!-- Memory blocks will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <!-- Free Lists -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-bold mb-4">空闲链表</h2>
+                    <div id="free-lists-container" class="space-y-2 text-sm max-h-60 overflow-y-auto pr-2">
+                        <!-- Free lists will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <!-- Log -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-bold mb-4">操作日志</h2>
+                    <div id="log-container" class="text-sm space-y-1 bg-gray-50 p-3 rounded-lg h-48 overflow-y-auto">
+                        <!-- Log messages will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONFIGURATION ---
+            const TOTAL_MEMORY_KB = 1024;
+            const MIN_BLOCK_SIZE_POWER = 4; // 2^4 = 16KB
+            const MAX_BLOCK_SIZE_POWER = Math.log2(TOTAL_MEMORY_KB);
+
+            // --- DOM ELEMENTS ---
+            const memoryContainer = document.getElementById('memory-container');
+            const allocSizeInput = document.getElementById('alloc-size');
+            const allocBtn = document.getElementById('alloc-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const allocatedList = document.getElementById('allocated-list');
+            const logContainer = document.getElementById('log-container');
+            const freeListsContainer = document.getElementById('free-lists-container');
+            document.getElementById('total-mem-size').textContent = TOTAL_MEMORY_KB;
+
+            // --- STATE ---
+            let freeLists; // Array of Sets, index is power of 2
+            let allocatedBlocks; // Map: address -> { size, originalSize }
+
+            // --- INITIALIZATION ---
+            function initialize() {
+                // freeLists[i] stores a Set of starting addresses for free blocks of size 2^i
+                freeLists = Array.from({ length: MAX_BLOCK_SIZE_POWER + 1 }, () => new Set());
+                allocatedBlocks = new Map();
+
+                // Start with one large block of total memory size
+                freeLists[MAX_BLOCK_SIZE_POWER].add(0);
+
+                logMessage('系统初始化完成。', 'system');
+                renderAll();
+            }
+
+            // --- LOGGING ---
+            function logMessage(message, type = 'info') {
+                const colors = {
+                    info: 'text-gray-600',
+                    alloc: 'text-blue-600',
+                    split: 'text-purple-600',
+                    free: 'text-green-700',
+                    merge: 'text-teal-600',
+                    error: 'text-red-600 font-bold',
+                    system: 'text-indigo-600 font-bold'
+                };
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-message ${colors[type]}`;
+                logEntry.innerHTML = `&rarr; ${message}`;
+                logContainer.prepend(logEntry);
+                
+                // Highlight new message
+                logEntry.classList.add('new');
+                setTimeout(() => logEntry.classList.remove('new'), 1500);
+            }
+
+            // --- CORE LOGIC: ALLOCATION ---
+            function allocate(requestedSize) {
+                if (requestedSize <= 0) {
+                    logMessage('请求大小必须为正数。', 'error');
+                    return;
+                }
+                logMessage(`收到请求，需要分配 ${requestedSize} KB 内存。`, 'alloc');
+
+                // 1. Determine required block size (power of 2)
+                let requiredPower = Math.max(MIN_BLOCK_SIZE_POWER, Math.ceil(Math.log2(requestedSize)));
+                let requiredBlockSize = Math.pow(2, requiredPower);
+                logMessage(`计算得出需要一个 ${requiredBlockSize} KB 的块 (2^${requiredPower})。`, 'alloc');
+
+                // 2. Find a suitable block to split
+                let powerToSplit = requiredPower;
+                while (powerToSplit <= MAX_BLOCK_SIZE_POWER && freeLists[powerToSplit].size === 0) {
+                    powerToSplit++;
+                }
+
+                if (powerToSplit > MAX_BLOCK_SIZE_POWER) {
+                    logMessage('错误：没有足够的连续内存空间可供分配。', 'error');
+                    return;
+                }
+
+                // 3. Split larger blocks if necessary
+                let blockAddress = freeLists[powerToSplit].values().next().value;
+                freeLists[powerToSplit].delete(blockAddress);
+
+                while (powerToSplit > requiredPower) {
+                    const currentSize = Math.pow(2, powerToSplit);
+                    const buddySize = currentSize / 2;
+                    const buddyAddress = blockAddress + buddySize;
+                    
+                    logMessage(`分裂 ${currentSize}KB 块 (地址 ${blockAddress}) 为两个 ${buddySize}KB 的伙伴。`, 'split');
+                    logMessage(`将伙伴块 (地址 ${buddyAddress}) 加入 ${buddySize}KB 空闲链表。`, 'split');
+
+                    powerToSplit--;
+                    freeLists[powerToSplit].add(buddyAddress);
+                }
+
+                // 4. Allocate the block
+                allocatedBlocks.set(blockAddress, { size: requiredBlockSize, originalSize: requestedSize });
+                logMessage(`成功分配 ${requiredBlockSize} KB 块 (地址 ${blockAddress}) 以满足 ${requestedSize} KB 的请求。`, 'alloc');
+
+                renderAll();
+            }
+
+            // --- CORE LOGIC: DEALLOCATION ---
+            function deallocate(address) {
+                if (!allocatedBlocks.has(address)) {
+                    logMessage(`错误：地址 ${address} 不是一个已分配的块。`, 'error');
+                    return;
+                }
+
+                let { size } = allocatedBlocks.get(address);
+                allocatedBlocks.delete(address);
+                logMessage(`释放地址 ${address} 处的 ${size} KB 块。`, 'free');
+
+                let currentPower = Math.log2(size);
+                let currentAddress = address;
+
+                // Try to merge recursively
+                while (currentPower < MAX_BLOCK_SIZE_POWER) {
+                    const currentSize = Math.pow(2, currentPower);
+                    const buddyAddress = currentAddress ^ currentSize; // XOR to find buddy
+
+                    // Check if buddy is in the free list for this size
+                    if (freeLists[currentPower].has(buddyAddress)) {
+                        logMessage(`发现地址 ${buddyAddress} 的伙伴块空闲，进行合并。`, 'merge');
+                        
+                        // Remove buddy from free list and merge
+                        freeLists[currentPower].delete(buddyAddress);
+                        currentAddress = Math.min(currentAddress, buddyAddress);
+                        currentPower++;
+                        logMessage(`合并成一个新的 ${Math.pow(2, currentPower)} KB 块，地址 ${currentAddress}。`, 'merge');
+                    } else {
+                        // Buddy not free, cannot merge further
+                        logMessage(`伙伴块 (地址 ${buddyAddress}) 未空闲，停止合并。`, 'free');
+                        break;
+                    }
+                }
+
+                // Add the final (potentially merged) block to the correct free list
+                freeLists[currentPower].add(currentAddress);
+                logMessage(`将最终的 ${Math.pow(2, currentPower)} KB 块 (地址 ${currentAddress}) 加入空闲链表。`, 'free');
+
+                renderAll();
+            }
+
+            // --- RENDERING ---
+            function renderAll() {
+                renderMemoryView();
+                renderAllocatedList();
+                renderFreeLists();
+            }
+
+            function renderMemoryView() {
+                memoryContainer.innerHTML = '';
+                const allBlocks = [];
+
+                // Add free blocks
+                freeLists.forEach((list, power) => {
+                    const size = Math.pow(2, power);
+                    list.forEach(address => {
+                        allBlocks.push({ address, size, type: 'free' });
+                    });
+                });
+
+                // Add allocated blocks
+                allocatedBlocks.forEach((data, address) => {
+                    allBlocks.push({ address, size: data.size, type: 'allocated', originalSize: data.originalSize });
+                });
+
+                // Sort blocks by address to render them in order
+                allBlocks.sort((a, b) => a.address - b.address);
+
+                allBlocks.forEach(block => {
+                    const blockDiv = document.createElement('div');
+                    const percentage = (block.size / TOTAL_MEMORY_KB) * 100;
+                    
+                    let bgColor, textColor, label;
+                    if (block.type === 'allocated') {
+                        bgColor = 'bg-rose-500';
+                        textColor = 'text-white';
+                        label = `已分配: ${block.originalSize}KB<br>(占 ${block.size}KB)`;
+                    } else {
+                        bgColor = 'bg-emerald-500';
+                        textColor = 'text-white';
+                        label = `空闲<br>${block.size}KB`;
+                    }
+                    
+                    blockDiv.className = `memory-block ${bgColor} ${textColor} flex items-center justify-center text-center font-semibold text-xs md:text-sm p-1 rounded-md m-0.5`;
+                    blockDiv.style.flexBasis = `calc(${percentage}% - 4px)`; // -4px for margin
+                    blockDiv.style.height = 'calc(100% - 4px)';
+                    blockDiv.innerHTML = label;
+                    memoryContainer.appendChild(blockDiv);
+                });
+            }
+
+            function renderAllocatedList() {
+                allocatedList.innerHTML = '';
+                if (allocatedBlocks.size === 0) {
+                    allocatedList.innerHTML = '<p class="text-gray-500">暂无已分配的块。</p>';
+                    return;
+                }
+
+                const sortedAllocated = [...allocatedBlocks.entries()].sort((a, b) => a[0] - b[0]);
+
+                sortedAllocated.forEach(([address, data]) => {
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center justify-between bg-gray-100 p-3 rounded-lg';
+                    item.innerHTML = `
+                        <div>
+                            <p class="font-bold">地址: ${address}</p>
+                            <p class="text-sm text-gray-600">请求: ${data.originalSize}KB (分配: ${data.size}KB)</p>
+                        </div>
+                    `;
+                    const freeBtn = document.createElement('button');
+                    freeBtn.textContent = '释放';
+                    freeBtn.className = 'bg-emerald-600 text-white text-sm font-bold py-1 px-3 rounded-md hover:bg-emerald-700 transition-colors';
+                    freeBtn.onclick = () => deallocate(address);
+                    item.appendChild(freeBtn);
+                    allocatedList.appendChild(item);
+                });
+            }
+            
+            function renderFreeLists() {
+                freeListsContainer.innerHTML = '';
+                freeLists.forEach((list, power) => {
+                    if (power < MIN_BLOCK_SIZE_POWER) return;
+                    const size = Math.pow(2, power);
+                    const div = document.createElement('div');
+                    div.className = 'flex items-start';
+                    
+                    const label = document.createElement('div');
+                    label.className = 'font-bold w-24 flex-shrink-0';
+                    label.textContent = `${size} KB:`;
+                    
+                    const addresses = document.createElement('div');
+                    addresses.className = 'flex flex-wrap gap-2';
+                    
+                    if (list.size > 0) {
+                        const sortedAddresses = [...list].sort((a,b) => a-b);
+                        sortedAddresses.forEach(addr => {
+                            const span = document.createElement('span');
+                            span.className = 'bg-gray-200 px-2 py-0.5 rounded';
+                            span.textContent = `addr ${addr}`;
+                            addresses.appendChild(span);
+                        });
+                    } else {
+                        addresses.textContent = '空';
+                        addresses.className = 'text-gray-400';
+                    }
+                    
+                    div.appendChild(label);
+                    div.appendChild(addresses);
+                    freeListsContainer.appendChild(div);
+                });
+            }
+
+            // --- EVENT LISTENERS ---
+            allocBtn.addEventListener('click', () => {
+                const size = parseInt(allocSizeInput.value, 10);
+                allocate(size);
+            });
+
+            resetBtn.addEventListener('click', () => {
+                logContainer.innerHTML = '';
+                initialize();
+            });
+            
+            allocSizeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    allocBtn.click();
+                }
+            });
+
+            // --- START ---
+            initialize();
+        });
+    </script>
+
+</body>
+</html>

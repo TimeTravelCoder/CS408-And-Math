@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCP 运输连接管理 - 交互式解读 (UI优化版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .smooth-scroll { scroll-behavior: smooth; }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+            border: 1px solid #e5e7eb;
+        }
+        .tab-btn {
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active {
+            border-color: #2563eb;
+            color: #2563eb;
+            font-weight: 600;
+        }
+        /* -- Animation Diagram Styles -- */
+        .flow-diagram {
+            position: relative;
+            height: 250px;
+            background-color: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+        }
+        .flow-node {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 120px;
+            height: 120px;
+            background-color: white;
+            border: 2px solid #94a3b8;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: all 0.4s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .node-title {
+            font-weight: 700;
+            font-size: 1rem;
+            color: #1e293b;
+        }
+        .node-state {
+            font-size: 0.8rem;
+            font-family: monospace;
+            color: #475569;
+            background-color: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 0.25rem;
+            margin-top: 8px;
+            transition: background-color 0.4s ease;
+        }
+        .flow-node.client { left: 15%; }
+        .flow-node.server { right: 15%; }
+        .flow-node.active { border-color: #2563eb; }
+        .flow-node.active .node-state { background-color: #dbeafe; color: #1d4ed8; }
+
+        .packet {
+            position: absolute;
+            top: 50%;
+            left: calc(15% + 120px); /* Start next to client node */
+            width: 40px;
+            height: 28px;
+            background-color: #facc15;
+            border: 2px solid #ca8a04;
+            border-radius: 6px;
+            opacity: 0;
+            transform: translateY(-50%);
+            transition: all 1.5s cubic-bezier(0.5, 0, 0.5, 1);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #422006;
+            box-shadow: 0 4px 10px rgba(250, 204, 21, 0.5);
+        }
+        .packet.fin { background-color: #f87171; border-color: #b91c1c; box-shadow-color: rgba(248, 113, 113, 0.5); color: #450a0a; }
+        .packet.syn { background-color: #60a5fa; border-color: #2563eb; box-shadow-color: rgba(96, 165, 250, 0.5); color: #1e3a8a; }
+
+        .step-explanation {
+            transition: all 0.3s ease;
+            opacity: 0.6;
+            transform: scale(0.98);
+        }
+        .step-explanation.active {
+            opacity: 1;
+            transform: scale(1);
+            background-color: #eff6ff;
+        }
+    </style>
+</head>
+<body class="smooth-scroll">
+
+    <header class="bg-white/95 backdrop-blur-lg sticky top-0 z-50 shadow-sm">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-700">TCP 运输连接管理</h1>
+            <div class="hidden md:flex items-center space-x-8 text-base">
+                <a href="#interactive-flow" class="text-gray-600 hover:text-blue-700 transition duration-300">交互流程</a>
+                <a href="#key-concepts" class="text-gray-600 hover:text-blue-700 transition duration-300">核心问答</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-6 py-12 md:py-20">
+
+        <section id="interactive-flow" class="mb-20">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4 text-center">交互式握手流程</h2>
+            <p class="max-w-3xl mx-auto text-lg text-gray-600 mb-12 text-center">通过分步操作，直观理解TCP连接建立与释放的每一个细节。请点击下方的控制按钮来驱动流程。</p>
+            
+            <div class="card p-6 md:p-8">
+                <!-- Tabs -->
+                <div class="flex justify-center border-b-2 border-gray-200 mb-8">
+                    <button id="tab-establish" class="tab-btn px-6 py-3 text-lg active">连接建立 (三报文)</button>
+                    <button id="tab-release" class="tab-btn px-6 py-3 text-lg">连接释放 (四报文)</button>
+                </div>
+
+                <!-- Flow Diagram -->
+                <div class="flow-diagram mb-8">
+                    <div id="client-node" class="flow-node client">
+                        <span class="node-title">客户端</span>
+                        <span id="client-state" class="node-state">CLOSED</span>
+                    </div>
+                    <div id="server-node" class="flow-node server">
+                        <span class="node-title">服务器</span>
+                        <span id="server-state" class="node-state">LISTEN</span>
+                    </div>
+                    <div id="packet"></div>
+                </div>
+
+                <!-- Controls and Explanation -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+                    <div class="md:col-span-1 space-y-4">
+                        <h4 class="text-lg font-semibold text-center mb-2">控制面板</h4>
+                        <button id="next-step-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">下一步</button>
+                        <button id="reset-btn" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">重置</button>
+                    </div>
+                    <div class="md:col-span-2 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h4 class="text-lg font-semibold text-blue-800 mb-3">步骤详解</h4>
+                        <div id="explanation-container" class="text-gray-700 space-y-3"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="key-concepts" class="mb-20">
+            <h2 class="text-3xl md:text-4xl font-bold mb-12 text-center">核心概念问答</h2>
+            <div class="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                <div class="card p-8">
+                    <h3 class="text-2xl font-bold mb-4">Q: 为什么连接建立需要三次握手?</h3>
+                    <p class="text-gray-700 leading-relaxed">主要是为了**防止已失效的连接请求报文段被服务器错误地处理**。如果一个旧的、在网络中长时间滞留的连接请求突然到达服务器，而此时客户端并无意建立连接。如果是两次握手，服务器发送确认后就会单方面建立连接并等待数据，造成资源浪费。三次握手时，客户端不会对这个意外的确认进行第三次确认，服务器收不到最终确认，就知道这是一个无效请求，从而避免了错误。</p>
+                </div>
+                <div class="card p-8">
+                    <h3 class="text-2xl font-bold mb-4">Q: 为什么TIME_WAIT状态要等待2MSL?</h3>
+                    <p class="text-gray-700 leading-relaxed">这基于两个核心原因：<br>1. **确保连接可靠关闭**：保证主动关闭方发送的最后一个ACK报文能到达对方。如果该ACK丢失，对方会重传FIN，主动方在2MSL时间内能收到并重发ACK，确保对方能正常关闭。<br>2. **防止旧连接的报文干扰新连接**：等待2MSL可以确保本次连接中所有报文段都已从网络中消失，避免旧连接的延迟报文被新连接（可能复用相同端口号）误收。</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const flows = {
+        establish: {
+            title: "连接建立 (三报文握手)",
+            steps: [
+                { from: 'client', to: 'server', type: 'SYN', explanation: `<strong>第1步:</strong> 客户端请求建立连接。<br>发送一个SYN报文，并进入 <strong>SYN-SENT</strong> 状态。`, clientState: 'SYN-SENT', serverState: 'LISTEN' },
+                { from: 'server', to: 'client', type: 'SYN,ACK', explanation: `<strong>第2步:</strong> 服务器响应请求。<br>发送SYN和ACK报文，进入 <strong>SYN-RCVD</strong> 状态。`, clientState: 'SYN-SENT', serverState: 'SYN-RCVD' },
+                { from: 'client', to: 'server', type: 'ACK', explanation: `<strong>第3步:</strong> 客户端确认。<br>发送ACK报文，双方都进入 <strong>ESTABLISHED</strong> 状态，连接成功。`, clientState: 'ESTABLISHED', serverState: 'ESTABLISHED' }
+            ],
+            initialClientState: 'CLOSED', initialServerState: 'LISTEN'
+        },
+        release: {
+            title: "连接释放 (四报文握手)",
+            steps: [
+                { from: 'client', to: 'server', type: 'FIN', explanation: `<strong>第1步:</strong> 客户端请求关闭。<br>发送FIN报文，进入 <strong>FIN-WAIT-1</strong> 状态。`, clientState: 'FIN-WAIT-1', serverState: 'ESTABLISHED' },
+                { from: 'server', to: 'client', type: 'ACK', explanation: `<strong>第2步:</strong> 服务器确认。<br>发送ACK，进入 <strong>CLOSE-WAIT</strong>。客户端收到后进入 <strong>FIN-WAIT-2</strong>。`, clientState: 'FIN-WAIT-2', serverState: 'CLOSE-WAIT' },
+                { from: 'server', to: 'client', type: 'FIN', explanation: `<strong>第3步:</strong> 服务器请求关闭。<br>数据发送完毕，发送FIN，进入 <strong>LAST-ACK</strong> 状态。`, clientState: 'FIN-WAIT-2', serverState: 'LAST-ACK' },
+                { from: 'client', to: 'server', type: 'ACK', explanation: `<strong>第4步:</strong> 客户端最终确认。<br>发送ACK，客户端进入 <strong>TIME-WAIT</strong>。服务器收到后进入 <strong>CLOSED</strong>。`, clientState: 'TIME-WAIT', serverState: 'CLOSED' }
+            ],
+            initialClientState: 'ESTABLISHED', initialServerState: 'ESTABLISHED'
+        }
+    };
+
+    let currentFlow = 'establish';
+    let currentStep = -1;
+
+    // DOM Elements
+    const elements = {
+        tabEstablish: document.getElementById('tab-establish'),
+        tabRelease: document.getElementById('tab-release'),
+        nextStepBtn: document.getElementById('next-step-btn'),
+        resetBtn: document.getElementById('reset-btn'),
+        clientNode: document.getElementById('client-node'),
+        serverNode: document.getElementById('server-node'),
+        clientState: document.getElementById('client-state'),
+        serverState: document.getElementById('server-state'),
+        packet: document.getElementById('packet'),
+        explanationContainer: document.getElementById('explanation-container'),
+    };
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    function switchFlow(flowName) {
+        currentFlow = flowName;
+        elements.tabEstablish.classList.toggle('active', flowName === 'establish');
+        elements.tabRelease.classList.toggle('active', flowName === 'release');
+        resetFlow();
+    }
+
+    function renderExplanation() {
+        const flowData = flows[currentFlow];
+        elements.explanationContainer.innerHTML = '';
+        flowData.steps.forEach((step, index) => {
+            const el = document.createElement('div');
+            el.id = `explanation-step-${index}`;
+            el.className = 'step-explanation p-3 rounded-md border border-gray-200';
+            el.innerHTML = step.explanation;
+            elements.explanationContainer.appendChild(el);
+        });
+    }
+
+    function resetFlow() {
+        currentStep = -1;
+        const flowData = flows[currentFlow];
+        
+        elements.clientState.textContent = flowData.initialClientState;
+        elements.serverState.textContent = flowData.initialServerState;
+        
+        elements.clientNode.classList.remove('active');
+        elements.serverNode.classList.remove('active');
+        
+        elements.packet.style.opacity = 0;
+        
+        elements.nextStepBtn.disabled = false;
+        
+        renderExplanation();
+    }
+
+    async function executeNextStep() {
+        currentStep++;
+        const flowData = flows[currentFlow];
+        
+        if (currentStep >= flowData.steps.length) {
+            return;
+        }
+
+        elements.nextStepBtn.disabled = true;
+        const stepData = flowData.steps[currentStep];
+
+        // Highlight active explanation
+        document.querySelectorAll('.step-explanation').forEach(el => el.classList.remove('active'));
+        document.getElementById(`explanation-step-${currentStep}`).classList.add('active');
+
+        // Configure packet
+        elements.packet.className = 'packet'; // Reset classes
+        if (stepData.type.includes('FIN')) elements.packet.classList.add('fin');
+        if (stepData.type.includes('SYN')) elements.packet.classList.add('syn');
+        elements.packet.textContent = stepData.type;
+
+        // Animate packet
+        const isClientToServer = stepData.from === 'client';
+        elements.packet.style.transition = 'none';
+        elements.packet.style.left = isClientToServer ? 'calc(15% + 120px)' : 'calc(85% - 120px - 40px)';
+        
+        await sleep(50);
+        elements.packet.style.transition = 'all 1.5s cubic-bezier(0.5, 0, 0.5, 1)';
+        elements.packet.style.opacity = 1;
+
+        elements.packet.style.left = isClientToServer ? 'calc(85% - 40px)' : '15%';
+
+        // Highlight sender node
+        if (isClientToServer) {
+            elements.clientNode.classList.add('active');
+            elements.serverNode.classList.remove('active');
+        } else {
+            elements.serverNode.classList.add('active');
+            elements.clientNode.classList.remove('active');
+        }
+
+        await sleep(1500); // Wait for packet to arrive
+
+        // Update states and highlight receiver
+        elements.clientState.textContent = stepData.clientState;
+        elements.serverState.textContent = stepData.serverState;
+        
+        if (isClientToServer) {
+            elements.serverNode.classList.add('active');
+        } else {
+            elements.clientNode.classList.add('active');
+        }
+        
+        elements.packet.style.opacity = 0;
+        
+        await sleep(500);
+
+        if (currentStep < flowData.steps.length - 1) {
+            elements.nextStepBtn.disabled = false;
+        } else {
+             // End of flow
+             await sleep(500);
+             elements.clientNode.classList.remove('active');
+             elements.serverNode.classList.remove('active');
+        }
+    }
+
+    elements.tabEstablish.addEventListener('click', () => switchFlow('establish'));
+    elements.tabRelease.addEventListener('click', () => switchFlow('release'));
+    elements.nextStepBtn.addEventListener('click', executeNextStep);
+    elements.resetBtn.addEventListener('click', resetFlow);
+
+    // Initial setup
+    switchFlow('establish');
+});
+</script>
+
+</body>
+</html>
