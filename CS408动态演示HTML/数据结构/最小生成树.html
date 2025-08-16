@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>动态演示：最小生成树 (Prim & Kruskal)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            width: 95%;
+            max-width: 1200px;
+        }
+        #visualization-container {
+            border: 2px solid #bdc3c7;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            flex-grow: 1;
+        }
+        #controls-log-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 320px;
+        }
+        .panel {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        .panel h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        #controls button, #controls select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #3498db;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #controls button:hover {
+            background-color: #2980b9;
+        }
+        #controls button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #controls .control-group {
+            display: flex;
+            gap: 10px;
+        }
+        #log-panel {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ecf0f1;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            background-color: #ecf0f1;
+        }
+        #log-panel p {
+            margin: 0 0 5px 0;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 5px;
+        }
+        #log-panel .log-highlight {
+            font-weight: bold;
+            color: #e67e22;
+        }
+        #log-panel .log-success {
+            color: #27ae60;
+        }
+        #log-panel .log-fail {
+            color: #c0392b;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        /* SVG Styles */
+        .node {
+            transition: fill 0.5s ease;
+        }
+        .node-text {
+            font-size: 14px;
+            font-weight: bold;
+            fill: white;
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+        .edge {
+            transition: stroke 0.5s ease, stroke-width 0.5s ease;
+        }
+        .edge-text {
+            font-size: 12px;
+            fill: #34495e;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>动态演示：最小生成树 (Prim & Kruskal)</h1>
+
+    <div id="main-container">
+        <div id="visualization-container">
+            <svg id="graph-svg" width="100%" height="600"></svg>
+        </div>
+
+        <div id="controls-log-panel">
+            <div id="controls" class="panel">
+                <h3>控制面板</h3>
+                <label for="algorithm-select">选择算法:</label>
+                <select id="algorithm-select">
+                    <option value="prim">Prim 算法</option>
+                    <option value="kruskal">Kruskal 算法</option>
+                </select>
+                
+                <div class="control-group">
+                    <button id="start-btn">开始</button>
+                    <button id="reset-btn">重置</button>
+                </div>
+                
+                <div class="control-group">
+                     <button id="pause-btn" disabled>暂停</button>
+                    <button id="next-step-btn" disabled>下一步</button>
+                </div>
+                
+                <label for="speed-slider">动画速度:</label>
+                <input type="range" id="speed-slider" min="100" max="2000" value="1000" step="100">
+
+                <button id="new-graph-btn">生成新图</button>
+            </div>
+
+            <div class="panel">
+                <h3>状态日志</h3>
+                <div id="log-panel"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    class DisjointSet {
+        constructor(n) {
+            this.parent = Array.from({ length: n }, (_, i) => i);
+            this.rank = Array(n).fill(0);
+        }
+
+        find(i) {
+            if (this.parent[i] === i) {
+                return i;
+            }
+            return this.parent[i] = this.find(this.parent[i]); // Path compression
+        }
+
+        union(i, j) {
+            const rootI = this.find(i);
+            const rootJ = this.find(j);
+            if (rootI !== rootJ) {
+                if (this.rank[rootI] > this.rank[rootJ]) {
+                    this.parent[rootJ] = rootI;
+                } else if (this.rank[rootI] < this.rank[rootJ]) {
+                    this.parent[rootI] = rootJ;
+                } else {
+                    this.parent[rootJ] = rootI;
+                    this.rank[rootI]++;
+                }
+                return true;
+            }
+            return false;
+        }
+    }
+
+    const svg = document.getElementById('graph-svg');
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const nextStepBtn = document.getElementById('next-step-btn');
+    const newGraphBtn = document.getElementById('new-graph-btn');
+    const algoSelect = document.getElementById('algorithm-select');
+    const speedSlider = document.getElementById('speed-slider');
+    const logPanel = document.getElementById('log-panel');
+
+    const NS = "http://www.w3.org/2000/svg";
+    const NUM_NODES = 8;
+    const PADDING = 50;
+
+    let nodes = [];
+    let edges = [];
+    let isRunning = false;
+    let isPaused = false;
+    let nextStepResolver = null;
+
+    function logMessage(message, className = '') {
+        const p = document.createElement('p');
+        p.innerHTML = message;
+        if (className) p.classList.add(className);
+        logPanel.appendChild(p);
+        logPanel.scrollTop = logPanel.scrollHeight;
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, 3000 - ms));
+    }
+
+    function generateGraph() {
+        nodes = [];
+        edges = [];
+        const width = svg.clientWidth;
+        const height = svg.clientHeight;
+
+        for (let i = 0; i < NUM_NODES; i++) {
+            nodes.push({
+                id: i,
+                x: Math.random() * (width - 2 * PADDING) + PADDING,
+                y: Math.random() * (height - 2 * PADDING) + PADDING
+            });
+        }
+
+        for (let i = 0; i < NUM_NODES; i++) {
+            for (let j = i + 1; j < NUM_NODES; j++) {
+                 if (Math.random() > 0.4) { // Create a graph that's not fully connected
+                    const weight = Math.floor(Math.random() * 20) + 1;
+                    edges.push({ source: i, target: j, weight });
+                }
+            }
+        }
+        // Ensure graph is connected
+        let ds = new DisjointSet(NUM_NODES);
+        edges.forEach(e => ds.union(e.source, e.target));
+        let firstRoot = ds.find(0);
+        for(let i = 1; i < NUM_NODES; i++){
+            if(ds.find(i) !== firstRoot){
+                const weight = Math.floor(Math.random() * 20) + 1;
+                edges.push({source: 0, target: i, weight});
+                ds.union(0, i);
+            }
+        }
+
+    }
+    
+    function drawGraph() {
+        svg.innerHTML = '';
+        
+        edges.forEach((edge, i) => {
+            const sourceNode = nodes[edge.source];
+            const targetNode = nodes[edge.target];
+            const line = document.createElementNS(NS, 'line');
+            line.setAttribute('x1', sourceNode.x);
+            line.setAttribute('y1', sourceNode.y);
+            line.setAttribute('x2', targetNode.x);
+            line.setAttribute('y2', targetNode.y);
+            line.setAttribute('stroke', '#bdc3c7');
+            line.setAttribute('stroke-width', '3');
+            line.setAttribute('id', `edge-${edge.source}-${edge.target}`);
+            line.classList.add('edge');
+            svg.appendChild(line);
+
+            const text = document.createElementNS(NS, 'text');
+            text.setAttribute('x', (sourceNode.x + targetNode.x) / 2);
+            text.setAttribute('y', (sourceNode.y + targetNode.y) / 2);
+            text.textContent = edge.weight;
+            text.classList.add('edge-text');
+            svg.appendChild(text);
+        });
+
+        nodes.forEach(node => {
+            const circle = document.createElementNS(NS, 'circle');
+            circle.setAttribute('cx', node.x);
+            circle.setAttribute('cy', node.y);
+            circle.setAttribute('r', '20');
+            circle.setAttribute('fill', '#95a5a6');
+            circle.setAttribute('stroke', '#7f8c8d');
+            circle.setAttribute('stroke-width', '3');
+            circle.setAttribute('id', `node-${node.id}`);
+            circle.classList.add('node');
+            svg.appendChild(circle);
+
+            const text = document.createElementNS(NS, 'text');
+            text.setAttribute('x', node.x);
+            text.setAttribute('y', node.y);
+            text.textContent = node.id;
+            text.classList.add('node-text');
+            svg.appendChild(text);
+        });
+    }
+
+    function updateElementStyle(id, styles) {
+        const el = document.getElementById(id);
+        if (el) {
+            Object.entries(styles).forEach(([prop, value]) => {
+                el.style[prop] = value;
+            });
+        }
+    }
+
+    async function checkPause() {
+        if (isPaused) {
+            nextStepBtn.disabled = false;
+            await new Promise(resolve => {
+                nextStepResolver = resolve;
+            });
+            nextStepBtn.disabled = true;
+        }
+    }
+    
+    // --- Algorithms ---
+
+    async function runPrim() {
+        logMessage("<strong>开始执行 Prim 算法...</strong>");
+        const startNodeId = 0;
+        let visited = new Set([startNodeId]);
+        let mstEdges = [];
+        let totalWeight = 0;
+
+        updateElementStyle(`node-${startNodeId}`, { fill: '#2ecc71' });
+        logMessage(`1. 从顶点 ${startNodeId} 开始。`, 'log-success');
+        
+        while (visited.size < NUM_NODES) {
+            await checkPause();
+            let minEdge = null;
+            let candidateEdges = [];
+
+            // Find all edges connecting visited to unvisited nodes
+            for (const edge of edges) {
+                const isSourceVisited = visited.has(edge.source);
+                const isTargetVisited = visited.has(edge.target);
+                if (isSourceVisited !== isTargetVisited) {
+                    candidateEdges.push(edge);
+                }
+            }
+            
+            if (candidateEdges.length === 0) break; // Should not happen in a connected graph
+
+            // Highlight candidate edges
+            candidateEdges.forEach(e => updateElementStyle(`edge-${e.source}-${e.target}`, { stroke: '#f1c40f', 'stroke-width': '5' }));
+            logMessage(`2. 寻找连接<span class="log-success">已访问</span>顶点和<span class="log-fail">未访问</span>顶点的所有边中权重最小的边。`, 'log-highlight');
+            await sleep(speedSlider.value);
+            await checkPause();
+
+
+            minEdge = candidateEdges.reduce((min, edge) => (!min || edge.weight < min.weight) ? edge : min, null);
+
+            // Reset highlight for non-selected candidates
+            candidateEdges.forEach(e => {
+                if (e !== minEdge) {
+                   const edgeId = `edge-${e.source}-${e.target}`;
+                   if(!mstEdges.find(me => `edge-${me.source}-${me.target}` === edgeId))
+                     updateElementStyle(edgeId, { stroke: '#bdc3c7', 'stroke-width': '3' });
+                }
+            });
+
+            if (minEdge) {
+                updateElementStyle(`edge-${minEdge.source}-${minEdge.target}`, { stroke: '#2ecc71', 'stroke-width': '6' });
+                logMessage(`3. 选中边 ${minEdge.source}-${minEdge.target} (权重: ${minEdge.weight})。`, 'log-success');
+                
+                mstEdges.push(minEdge);
+                totalWeight += minEdge.weight;
+
+                const newNodeId = visited.has(minEdge.source) ? minEdge.target : minEdge.source;
+                visited.add(newNodeId);
+                updateElementStyle(`node-${newNodeId}`, { fill: '#2ecc71' });
+            } else {
+                 logMessage("没有更多可连接的边，算法结束。", 'log-fail');
+                 break;
+            }
+            await sleep(speedSlider.value);
+        }
+        logMessage(`<strong>Prim 算法完成！最小生成树总权重: ${totalWeight}</strong>`);
+        terminate();
+    }
+
+    async function runKruskal() {
+        logMessage("<strong>开始执行 Kruskal 算法...</strong>");
+        let sortedEdges = [...edges].sort((a, b) => a.weight - b.weight);
+        let ds = new DisjointSet(NUM_NODES);
+        let mstEdges = [];
+        let totalWeight = 0;
+        
+        logMessage("1. 将所有边按权重从小到大排序。");
+        await sleep(speedSlider.value);
+        
+        for (const edge of sortedEdges) {
+            if (mstEdges.length === NUM_NODES - 1) break;
+
+            await checkPause();
+            const { source, target, weight } = edge;
+            updateElementStyle(`edge-${source}-${target}`, { stroke: '#f1c40f', 'stroke-width': '5' });
+            logMessage(`2. 考察边 ${source}-${target} (权重: ${weight})。`, 'log-highlight');
+            await sleep(speedSlider.value);
+            await checkPause();
+
+            if (ds.find(source) !== ds.find(target)) {
+                ds.union(source, target);
+                mstEdges.push(edge);
+                totalWeight += weight;
+                updateElementStyle(`edge-${source}-${target}`, { stroke: '#2ecc71', 'stroke-width': '6' });
+                updateElementStyle(`node-${source}`, { fill: '#2ecc71' });
+                updateElementStyle(`node-${target}`, { fill: '#2ecc71' });
+                logMessage(`   边 ${source}-${target} 不会形成环路，加入MST。`, 'log-success');
+            } else {
+                updateElementStyle(`edge-${source}-${target}`, { stroke: '#e74c3c' });
+                 logMessage(`   边 ${source}-${target} 会形成环路，跳过。`, 'log-fail');
+                 await sleep(speedSlider.value/2);
+                 updateElementStyle(`edge-${source}-${target}`, { stroke: '#bdc3c7' });
+            }
+            await sleep(speedSlider.value);
+        }
+        logMessage(`<strong>Kruskal 算法完成！最小生成树总权重: ${totalWeight}</strong>`);
+        terminate();
+    }
+    
+    // --- Control Logic ---
+
+    function reset() {
+        isRunning = false;
+        isPaused = false;
+        nextStepResolver = null;
+        logPanel.innerHTML = '';
+        drawGraph();
+        
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        nextStepBtn.disabled = true;
+        algoSelect.disabled = false;
+        newGraphBtn.disabled = false;
+    }
+    
+    function terminate(){
+        isRunning = false;
+        isPaused = false;
+        pauseBtn.disabled = true;
+        nextStepBtn.disabled = true;
+        startBtn.disabled = true;
+    }
+
+    startBtn.addEventListener('click', () => {
+        if (isRunning) return;
+        isRunning = true;
+        isPaused = false;
+        
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        nextStepBtn.disabled = true;
+        algoSelect.disabled = true;
+        newGraphBtn.disabled = true;
+
+        const selectedAlgo = algoSelect.value;
+        if (selectedAlgo === 'prim') {
+            runPrim();
+        } else {
+            runKruskal();
+        }
+    });
+
+    pauseBtn.addEventListener('click', () => {
+        isPaused = !isPaused;
+        pauseBtn.textContent = isPaused ? '继续' : '暂停';
+        if (!isPaused && nextStepResolver) {
+            nextStepResolver();
+            nextStepResolver = null;
+        }
+    });
+    
+    nextStepBtn.addEventListener('click', () => {
+        if(isPaused && nextStepResolver) {
+            nextStepResolver();
+            nextStepResolver = null;
+        }
+    });
+
+    resetBtn.addEventListener('click', () => {
+       // A bit of a hack to stop async functions, but good enough for a demo
+       // A more robust solution would involve cancellation tokens.
+       location.reload(); 
+    });
+    
+    newGraphBtn.addEventListener('click', () => {
+        generateGraph();
+        reset();
+    });
+
+    // Initial setup
+    generateGraph();
+    drawGraph();
+    
+    </script>
+</body>
+</html>
