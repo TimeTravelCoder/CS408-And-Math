@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>动态演示：生成树 (Spanning Tree)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        #main-container {
+            display: flex;
+            gap: 20px;
+            width: 95%;
+            max-width: 1200px;
+        }
+        #visualization-container {
+            border: 2px solid #bdc3c7;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            flex-grow: 1;
+        }
+        #controls-log-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 350px;
+        }
+        .panel {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        .panel h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        #controls button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #3498db;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #controls button:hover {
+            background-color: #2980b9;
+        }
+        #controls button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #log-panel {
+            height: 350px;
+            overflow-y: auto;
+            border: 1px solid #ecf0f1;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            background-color: #ecf0f1;
+        }
+        #log-panel p {
+            margin: 0 0 5px 0;
+            padding-bottom: 5px;
+        }
+        #log-panel .log-success { color: #27ae60; }
+        #log-panel .log-fail { color: #c0392b; }
+        #log-panel .log-info { color: #2980b9; }
+
+        /* SVG Styles */
+        .edge { stroke: #bdc3c7; stroke-width: 3; transition: all 0.5s ease; }
+        .edge-in-tree { stroke: #2ecc71; stroke-width: 6; }
+        .edge-ignored { stroke: #e74c3c; stroke-dasharray: 5,5; }
+        .edge-traversing { stroke: #f1c40f; stroke-width: 5; }
+
+        .node-circle { fill: #95a5a6; stroke: #7f8c8d; stroke-width: 3; transition: all 0.5s ease; }
+        .node-visited { fill: #2ecc71; }
+        .node-current { fill: #f1c40f; }
+
+        .node-text { font-size: 14px; font-weight: bold; fill: white; pointer-events: none; text-anchor: middle; dominant-baseline: central; }
+    </style>
+</head>
+<body>
+
+    <h1>动态演示：生成树 (Spanning Tree)</h1>
+
+    <div id="main-container">
+        <div id="visualization-container">
+            <svg id="graph-svg" width="100%" height="600"></svg>
+        </div>
+
+        <div id="controls-log-panel">
+            <div id="controls" class="panel">
+                <h3>控制面板</h3>
+                <button id="find-btn">寻找一个生成树 (DFS)</button>
+                <button id="reset-btn">重置</button>
+                <button id="new-graph-btn">生成新图</button>
+            </div>
+            <div class="panel">
+                <h3>状态日志</h3>
+                <div id="log-panel"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const svg = document.getElementById('graph-svg');
+    const findBtn = document.getElementById('find-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const newGraphBtn = document.getElementById('new-graph-btn');
+    const logPanel = document.getElementById('log-panel');
+
+    const NS = "http://www.w3.org/2000/svg";
+    const NUM_NODES = 7;
+    const PADDING = 50;
+    const ANIMATION_SPEED = 500;
+
+    let nodes = [];
+    let edges = [];
+    let adjacencyList = [];
+    let isRunning = false;
+    
+    function logMessage(message, className = '') {
+        const p = document.createElement('p');
+        p.innerHTML = message;
+        if (className) p.classList.add(className);
+        logPanel.appendChild(p);
+        logPanel.scrollTop = logPanel.scrollHeight;
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    
+    function createAndDrawGraph() {
+        // Create graph data
+        nodes = [];
+        edges = [];
+        adjacencyList = Array.from({ length: NUM_NODES }, () => []);
+        const width = svg.clientWidth;
+        const height = svg.clientHeight;
+        
+        for (let i = 0; i < NUM_NODES; i++) {
+            nodes.push({
+                id: i,
+                x: Math.cos(2 * Math.PI * i / NUM_NODES) * (Math.min(width, height)/2 - PADDING) + width/2,
+                y: Math.sin(2 * Math.PI * i / NUM_NODES) * (Math.min(width, height)/2 - PADDING) + height/2
+            });
+        }
+        
+        let connectedPairs = new Set();
+        // 1. Create a path to ensure connectivity
+        for (let i = 0; i < NUM_NODES - 1; i++) {
+            addEdge(i, i + 1, connectedPairs);
+        }
+        addEdge(NUM_NODES - 1, 0, connectedPairs); // Make a cycle
+        
+        // 2. Add extra edges to create more cycles
+        const extraEdges = Math.floor(NUM_NODES / 2);
+        for(let i=0; i < extraEdges; i++) {
+            let u = Math.floor(Math.random() * NUM_NODES);
+            let v = Math.floor(Math.random() * NUM_NODES);
+            if(u !== v) addEdge(u, v, connectedPairs);
+        }
+        drawGraph();
+    }
+    
+    function addEdge(u, v, pairSet) {
+        const key = `${Math.min(u, v)}-${Math.max(u, v)}`;
+        if (!pairSet.has(key)) {
+            edges.push({ source: u, target: v });
+            adjacencyList[u].push(v);
+            adjacencyList[v].push(u);
+            pairSet.add(key);
+        }
+    }
+
+    function drawGraph() {
+        svg.innerHTML = '';
+        const edgeGroup = document.createElementNS(NS, 'g');
+        const nodeGroup = document.createElementNS(NS, 'g');
+        svg.appendChild(edgeGroup);
+        svg.appendChild(nodeGroup);
+
+        edges.forEach(edge => {
+            const sourceNode = nodes[edge.source];
+            const targetNode = nodes[edge.target];
+            const line = document.createElementNS(NS, 'line');
+            line.setAttribute('x1', sourceNode.x);
+            line.setAttribute('y1', sourceNode.y);
+            line.setAttribute('x2', targetNode.x);
+            line.setAttribute('y2', targetNode.y);
+            const edgeId = `edge-${Math.min(edge.source, edge.target)}-${Math.max(edge.source, edge.target)}`;
+            line.setAttribute('id', edgeId);
+            line.classList.add('edge');
+            edgeGroup.appendChild(line);
+        });
+
+        nodes.forEach(node => {
+            const circle = document.createElementNS(NS, 'circle');
+            circle.setAttribute('cx', node.x);
+            circle.setAttribute('cy', node.y);
+            circle.setAttribute('r', '20');
+            circle.setAttribute('id', `node-${node.id}`);
+            circle.classList.add('node-circle');
+            nodeGroup.appendChild(circle);
+
+            const text = document.createElementNS(NS, 'text');
+            text.setAttribute('x', node.x);
+            text.setAttribute('y', node.y);
+            text.textContent = node.id;
+            text.classList.add('node-text');
+            nodeGroup.appendChild(text);
+        });
+    }
+
+    function setElementClass(id, className, add = true) {
+        const el = document.getElementById(id);
+        if(el) {
+            if (add) el.classList.add(className);
+            else el.classList.remove(className);
+        }
+    }
+
+    async function runDFS() {
+        isRunning = true;
+        findBtn.disabled = true;
+        
+        const startNode = Math.floor(Math.random() * NUM_NODES);
+        const stack = [startNode];
+        const visited = new Set([startNode]);
+        const spanningTreeEdges = new Set();
+        
+        logMessage(`<b>--- 开始寻找生成树 (DFS) ---</b>`);
+        logMessage(`从随机顶点 ${startNode} 开始搜索`, 'log-info');
+        
+        setElementClass(`node-${startNode}`, 'node-visited');
+        await sleep(ANIMATION_SPEED);
+
+        while (stack.length > 0) {
+            const u = stack.pop();
+            setElementClass(`node-${u}`, 'node-current');
+            logMessage(`当前访问顶点: ${u}`, 'log-info');
+
+            // Shuffle neighbors to produce different trees on different runs
+            const neighbors = [...adjacencyList[u]].sort(() => Math.random() - 0.5);
+
+            for (const v of neighbors) {
+                const edgeId = `edge-${Math.min(u, v)}-${Math.max(u, v)}`;
+                setElementClass(edgeId, 'edge-traversing');
+                await sleep(ANIMATION_SPEED);
+
+                if (!visited.has(v)) {
+                    logMessage(`顶点 ${v} 未访问，将边 ${u}-${v} 加入生成树`, 'log-success');
+                    visited.add(v);
+                    stack.push(u); // Push parent back to explore other branches later
+                    stack.push(v);
+                    
+                    setElementClass(edgeId, 'edge-traversing', false);
+                    setElementClass(edgeId, 'edge-in-tree');
+                    spanningTreeEdges.add(edgeId);
+
+                    setElementClass(`node-${v}`, 'node-visited');
+                    setElementClass(`node-${u}`, 'node-current', false);
+                    await sleep(ANIMATION_SPEED);
+                    break; // Go deep into the new branch
+                } else {
+                    logMessage(`顶点 ${v} 已访问，忽略边 ${u}-${v} (避免成环)`, 'log-fail');
+                    setElementClass(edgeId, 'edge-traversing', false);
+                    if (!spanningTreeEdges.has(edgeId)) {
+                        setElementClass(edgeId, 'edge-ignored');
+                    }
+                }
+            }
+            setElementClass(`node-${u}`, 'node-current', false);
+        }
+        
+        logMessage(`<b>--- 生成树构建完成 ---</b>`);
+        logMessage(`共包含 ${visited.size} 个顶点和 ${spanningTreeEdges.size} 条边。`);
+        isRunning = false;
+    }
+
+    function reset() {
+        if (isRunning) return;
+        logPanel.innerHTML = '';
+        drawGraph();
+        findBtn.disabled = false;
+    }
+
+    findBtn.addEventListener('click', () => {
+        if(isRunning) return;
+        reset();
+        runDFS();
+    });
+    
+    resetBtn.addEventListener('click', reset);
+    
+    newGraphBtn.addEventListener('click', () => {
+        if(isRunning) return;
+        createAndDrawGraph();
+        reset();
+    });
+
+    // Initial setup
+    createAndDrawGraph();
+</script>
+</body>
+</html>
