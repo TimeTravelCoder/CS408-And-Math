@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCP 流量控制 - 交互式模拟器 (优化版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- 
+      优化计划:
+      1.  UI/UX 增强:
+          -   新增一个“状态仪表盘”，实时显示关键变量(rwnd, LastByteAcked等)，将抽象概念数字化，便于理解。
+          -   在发送和接收缓冲区上直接显示字节序号，增强可视化效果。
+          -   为日志条目添加不同类型的图标，使其一目了然。
+      2.  美学提升:
+          -   采用更柔和、更专业的Teal/Orange/Slate调色板，提升视觉舒适度。
+          -   为主标题和卡片添加微妙的渐变和阴影效果，增强现代感。
+          -   优化按钮和开关的样式及交互反馈。
+      3.  代码重构:
+          -   将JavaScript逻辑拆分为状态管理(state)、UI渲染(render)、事件处理(handlers)和动画(animate)等模块，提高代码的可读性和可维护性。
+          -   确保所有UI更新都通过单一的`render()`函数完成，实现数据与视图的单向流动。
+    -->
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background-color: #f1f5f9; }
+        .card { background-color: white; border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+        .buffer { background-color: #e2e8f0; border: 1px solid #cbd5e1; height: 60px; position: relative; overflow: hidden; border-radius: 0.5rem; }
+        .buffer-data { position: absolute; top: 0; height: 100%; transition: all 0.5s ease-in-out; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75rem; font-weight: bold; }
+        .sent-data { background-color: #0d9488; }
+        .acked-data { background-color: #16a34a; }
+        .received-data { background-color: #f97316; }
+        .window-marker { position: absolute; top: -20px; bottom: -20px; border-left: 3px dashed; transition: all 0.5s ease; z-index: 5; }
+        .packet {
+            position: absolute; width: auto; min-width: 80px; padding: 5px 10px;
+            color: white; border-radius: 0.5rem; font-size: 0.8rem; text-align: center;
+            opacity: 0; transition: all 0.8s ease-in-out; z-index: 10;
+            transform: translateX(-50%); box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .data-packet { background-color: #14b8a6; }
+        .ack-packet { background-color: #22c55e; }
+        .probe-packet { background-color: #ea580c; }
+        .log-entry { display: flex; align-items: flex-start; gap: 0.75rem; border-left: 3px solid; padding: 0.5rem 0 0.5rem 1rem; margin-bottom: 0.75rem; }
+        .log-send { border-color: #14b8a6; }
+        .log-receive { border-color: #f97316; }
+        .log-ack { border-color: #22c55e; }
+        .log-sys { border-color: #64748b; }
+        .log-warn { border-color: #ef4444; }
+        .gradient-text { background: linear-gradient(to right, #0d9488, #0ea5e9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <main class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold gradient-text">TCP 流量控制交互模拟 (优化版)</h1>
+            <p class="mt-2 max-w-3xl mx-auto text-lg text-slate-600">通过控制发送和接收过程，直观理解滑动窗口、零窗口探测和传输效率优化机制。</p>
+        </header>
+
+        <div class="card p-6 md:p-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Controls -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="p-4 bg-slate-50 rounded-lg border">
+                        <h3 class="font-bold text-lg mb-3 text-slate-700">发送方 (A) 控制</h3>
+                        <div class="space-y-4">
+                            <button id="send-data-btn" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md"><i class="fas fa-paper-plane"></i>应用进程发送数据</button>
+                            <div>
+                                <label for="nagle-toggle" class="flex items-center cursor-pointer">
+                                    <input type="checkbox" id="nagle-toggle" class="sr-only peer" checked>
+                                    <div class="relative w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                    <span class="ms-3 text-sm font-medium text-slate-900">启用Nagle算法</span>
+                                </label>
+                                <p class="text-xs text-slate-500 mt-1 ml-14">防止发送大量小数据包，提高效率。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded-lg border">
+                         <h3 class="font-bold text-lg mb-3 text-slate-700">接收方 (B) 控制</h3>
+                         <div class="space-y-4">
+                            <button id="read-data-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md"><i class="fas fa-book-open"></i>应用进程读取数据</button>
+                            <div>
+                               <label for="silly-window-toggle" class="flex items-center cursor-pointer">
+                                    <input type="checkbox" id="silly-window-toggle" class="sr-only peer" checked>
+                                    <div class="relative w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                                    <span class="ms-3 text-sm font-medium text-slate-900">避免糊涂窗口</span>
+                                </label>
+                                <p class="text-xs text-slate-500 mt-1 ml-14">避免通告小窗口，提高效率。</p>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="p-4 bg-slate-50 rounded-lg border">
+                        <h3 class="font-bold text-lg mb-3 text-slate-700">模拟控制</h3>
+                        <button id="reset-sim-btn" class="w-full bg-slate-500 hover:bg-slate-600 text-white font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md"><i class="fas fa-undo"></i>重置模拟</button>
+                    </div>
+                </div>
+
+                <!-- Visualization & Log -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- Status Dashboard -->
+                    <div class="card p-4 bg-slate-50 border-slate-200">
+                        <h4 class="font-bold text-lg mb-3 text-center">状态仪表盘</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                            <div><p class="text-sm text-slate-500">已确认字节 (Acked)</p><p id="status-acked" class="font-bold text-xl text-green-600">0</p></div>
+                            <div><p class="text-sm text-slate-500">已发送字节 (Sent)</p><p id="status-sent" class="font-bold text-xl text-teal-600">0</p></div>
+                            <div><p class="text-sm text-slate-500">接收窗口 (rwnd)</p><p id="status-rwnd" class="font-bold text-xl text-orange-600">0</p></div>
+                            <div><p class="text-sm text-slate-500">接收方缓存 (Buffered)</p><p id="status-buffered" class="font-bold text-xl text-amber-500">0</p></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Visualization Area -->
+                    <div id="vis-area" class="relative space-y-4">
+                        <!-- Sender -->
+                        <div>
+                            <div class="flex items-center gap-3 mb-2">
+                                <i class="fas fa-server text-2xl text-teal-600"></i>
+                                <h4 class="font-bold text-slate-800">发送方 (A) 缓冲区</h4>
+                            </div>
+                            <div class="buffer">
+                                <div id="sender-acked-data" class="buffer-data acked-data"><span></span></div>
+                                <div id="sender-sent-data" class="buffer-data sent-data"><span></span></div>
+                                <div id="sender-window" class="window-marker border-teal-500">
+                                    <div class="absolute -top-5 text-xs text-teal-600 font-semibold">发送窗口</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Channel -->
+                        <div id="channel" class="relative h-28 my-2">
+                            <div class="w-full h-full absolute flex justify-around -z-10">
+                                <!-- Data Lane (A -> B) -->
+                                <div class="w-1/2 relative flex justify-center">
+                                    <div class="absolute top-0 bottom-0 w-0.5 bg-slate-300 border-l-2 border-r-2 border-dotted border-slate-300"></div>
+                                    <i class="fas fa-arrow-down absolute top-2 text-slate-400 text-lg"></i>
+                                    <span class="absolute top-8 text-xs text-slate-500 font-semibold">数据信道</span>
+                                </div>
+                                <!-- ACK Lane (B -> A) -->
+                                <div class="w-1/2 relative flex justify-center">
+                                    <div class="absolute top-0 bottom-0 w-0.5 bg-slate-300 border-l-2 border-r-2 border-dotted border-slate-300"></div>
+                                    <i class="fas fa-arrow-up absolute bottom-2 text-slate-400 text-lg"></i>
+                                    <span class="absolute bottom-8 text-xs text-slate-500 font-semibold">确认信道</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Receiver -->
+                        <div>
+                             <div class="flex items-center gap-3 mb-2">
+                                <i class="fas fa-laptop text-2xl text-orange-600"></i>
+                                <h4 class="font-bold text-slate-800">接收方 (B) 缓冲区</h4>
+                            </div>
+                            <div class="buffer">
+                                <div id="receiver-received-data" class="buffer-data received-data"><span></span></div>
+                                <div id="receiver-window" class="window-marker border-orange-500">
+                                     <div class="absolute -top-5 text-xs text-orange-600 font-semibold">接收窗口 (rwnd)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Log Area -->
+                    <div>
+                        <h4 class="font-bold text-lg mb-4">事件日志</h4>
+                        <div id="log-area" class="h-64 overflow-y-auto bg-slate-50 p-4 rounded-lg border border-slate-200"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DOM Elements ---
+    const elements = {
+        sendDataBtn: document.getElementById('send-data-btn'),
+        readDataBtn: document.getElementById('read-data-btn'),
+        resetSimBtn: document.getElementById('reset-sim-btn'),
+        nagleToggle: document.getElementById('nagle-toggle'),
+        sillyWindowToggle: document.getElementById('silly-window-toggle'),
+        
+        // Status Dashboard
+        statusAcked: document.getElementById('status-acked'),
+        statusSent: document.getElementById('status-sent'),
+        statusRwnd: document.getElementById('status-rwnd'),
+        statusBuffered: document.getElementById('status-buffered'),
+
+        // Sender Visuals
+        senderAckedData: document.getElementById('sender-acked-data'),
+        senderSentData: document.getElementById('sender-sent-data'),
+        senderWindow: document.getElementById('sender-window'),
+        
+        // Receiver Visuals
+        receiverReceivedData: document.getElementById('receiver-received-data'),
+        receiverWindow: document.getElementById('receiver-window'),
+        
+        channel: document.getElementById('channel'),
+        logArea: document.getElementById('log-area'),
+    };
+
+    // --- Simulation Constants & State ---
+    const MAX_BUFFER_SIZE = 1000;
+    const MSS = 100;
+    let state = {};
+    let persistenceTimer = null;
+
+    const logIcons = {
+        send: 'fa-paper-plane text-teal-500',
+        receive: 'fa-download text-orange-500',
+        ack: 'fa-check-double text-green-500',
+        sys: 'fa-gears text-slate-500',
+        warn: 'fa-triangle-exclamation text-red-500',
+    };
+
+    // --- State Management ---
+    function resetState() {
+        if (persistenceTimer) clearInterval(persistenceTimer);
+        persistenceTimer = null;
+        
+        state = {
+            lastByteAcked: 0,
+            lastByteSent: 0,
+            senderUnsentBuffer: 0, // App data written but not yet sent
+            rwnd: 400, // Receiver's advertised window
+            
+            receiverBufferedData: 0, // Data received but not yet read by app
+            
+            nagleEnabled: elements.nagleToggle.checked,
+            sillyWindowEnabled: elements.sillyWindowToggle.checked,
+            isSimulating: false,
+        };
+        elements.logArea.innerHTML = '';
+        addLog('sys', '模拟已重置。初始接收窗口 rwnd = 400。');
+        render();
+    }
+    
+    // --- UI Rendering ---
+    function addLog(type, message) {
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-${type}`;
+        const icon = document.createElement('i');
+        icon.className = `fas ${logIcons[type] || 'fa-info-circle'} mt-1`;
+        
+        const content = document.createElement('div');
+        const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+        content.innerHTML = `<p class="font-medium text-slate-800">${message}</p><p class="text-xs text-slate-500">${time}</p>`;
+        
+        entry.appendChild(icon);
+        entry.appendChild(content);
+        elements.logArea.prepend(entry);
+    }
+    
+    function render() {
+        // --- Dashboard Update ---
+        elements.statusAcked.textContent = state.lastByteAcked;
+        elements.statusSent.textContent = state.lastByteSent;
+        elements.statusRwnd.textContent = state.rwnd;
+        elements.statusBuffered.textContent = state.receiverBufferedData;
+
+        // --- Sender Buffer Visuals ---
+        const toPercentage = val => (val / MAX_BUFFER_SIZE) * 100;
+        elements.senderAckedData.style.width = `${toPercentage(state.lastByteAcked)}%`;
+        elements.senderAckedData.querySelector('span').textContent = state.lastByteAcked > 0 ? `0-${state.lastByteAcked}` : '';
+        
+        elements.senderSentData.style.left = `${toPercentage(state.lastByteAcked)}%`;
+        const sentUnackedWidth = state.lastByteSent - state.lastByteAcked;
+        elements.senderSentData.style.width = `${toPercentage(sentUnackedWidth)}%`;
+        elements.senderSentData.querySelector('span').textContent = sentUnackedWidth > 0 ? `${state.lastByteAcked+1}-${state.lastByteSent}` : '';
+        
+        const effectiveWindow = Math.min(state.rwnd, MAX_BUFFER_SIZE - state.lastByteAcked);
+        elements.senderWindow.style.left = `${toPercentage(state.lastByteAcked)}%`;
+        elements.senderWindow.style.width = `${toPercentage(effectiveWindow)}%`;
+        
+        // --- Receiver Buffer Visuals ---
+        elements.receiverReceivedData.style.width = `${toPercentage(state.receiverBufferedData)}%`;
+        const nextByteExpected = state.lastByteAcked + state.receiverBufferedData;
+        elements.receiverReceivedData.style.left = `${toPercentage(state.lastByteAcked)}%`;
+        elements.receiverReceivedData.querySelector('span').textContent = state.receiverBufferedData > 0 ? `${state.lastByteAcked+1}-${nextByteExpected}`: '';
+        
+        const receiverFreeSpace = MAX_BUFFER_SIZE - state.receiverBufferedData;
+        elements.receiverWindow.style.left = `${toPercentage(nextByteExpected)}%`;
+        elements.receiverWindow.style.width = `${toPercentage(receiverFreeSpace)}%`;
+        
+        // --- Button State ---
+        const canSend = (state.lastByteAcked + state.senderUnsentBuffer) < MAX_BUFFER_SIZE && !state.isSimulating;
+        elements.sendDataBtn.disabled = !canSend;
+        elements.sendDataBtn.style.opacity = canSend ? '1' : '0.6';
+
+        const canRead = state.receiverBufferedData > 0 && !state.isSimulating;
+        elements.readDataBtn.disabled = !canRead;
+        elements.readDataBtn.style.opacity = canRead ? '1' : '0.6';
+    }
+    
+    // --- Animation Logic ---
+    function animatePacket(type, text, lane) {
+        const isDataLane = lane === 'data';
+        const yStart = isDataLane ? '-15%' : '115%';
+        const yEnd = isDataLane ? '115%' : '-15%';
+        const xPos = isDataLane ? '25%' : '75%';
+
+        return new Promise(resolve => {
+            const packet = document.createElement('div');
+            packet.className = `packet ${type}`;
+            packet.innerHTML = text;
+            elements.channel.appendChild(packet);
+            
+            packet.style.top = yStart;
+            packet.style.left = xPos;
+            
+            setTimeout(() => {
+                packet.style.opacity = '1';
+                packet.style.top = yEnd;
+            }, 50);
+
+            setTimeout(() => {
+                packet.remove();
+                resolve();
+            }, 1500); // Animation duration
+        });
+    }
+
+    // --- Core Simulation Logic ---
+    function sendDataSegment() {
+        const flightSize = state.lastByteSent - state.lastByteAcked;
+        const effectiveWindow = state.rwnd - flightSize;
+        const dataToSend = Math.min(state.senderUnsentBuffer, MSS, effectiveWindow);
+        
+        if (dataToSend <= 0) {
+            state.isSimulating = false;
+            return;
+        };
+
+        state.isSimulating = true;
+        const seq = state.lastByteSent;
+        state.lastByteSent += dataToSend;
+        state.senderUnsentBuffer -= dataToSend;
+
+        addLog('send', `发送方发送报文段, seq=${seq + 1}, len=${dataToSend}`);
+        render();
+        
+        animatePacket('data-packet', `SEQ=${seq+1}<br>LEN=${dataToSend}`, 'data').then(() => {
+            state.receiverBufferedData += dataToSend;
+            addLog('receive', `接收方收到 ${dataToSend} B数据，存入缓存。`);
+            sendAck();
+        });
+    }
+    
+    function sendAck() {
+        let ackRwnd = MAX_BUFFER_SIZE - state.receiverBufferedData;
+        const nextByteExpected = state.lastByteAcked + state.receiverBufferedData;
+
+        if (state.sillyWindowEnabled && ackRwnd < Math.min(MSS, MAX_BUFFER_SIZE * 0.4) && ackRwnd > 0) {
+            addLog('sys', `糊涂窗口避免机制生效，接收方推迟发送ACK，等待更大窗口。`);
+            state.isSimulating = false;
+            render();
+            return;
+        }
+
+        addLog('ack', `接收方发送ACK, ack=${nextByteExpected + 1}, rwnd=${ackRwnd}`);
+        
+        animatePacket('ack-packet', `ACK=${nextByteExpected+1}<br>RWND=${ackRwnd}`, 'ack').then(() => {
+            addLog('ack', `发送方收到ACK=${nextByteExpected + 1}。`);
+            state.lastByteAcked = nextByteExpected;
+            state.rwnd = ackRwnd;
+            
+            if (state.rwnd === 0) {
+                addLog('warn', `收到零窗口通知！发送方暂停发送。启动持续计时器。`);
+                if (!persistenceTimer) persistenceTimer = setInterval(sendProbe, 3500);
+            } else {
+                if(persistenceTimer) {
+                    clearInterval(persistenceTimer);
+                    persistenceTimer = null;
+                    addLog('sys', `收到非零窗口，停止持续计时器。`);
+                }
+            }
+            
+            if (state.nagleEnabled && state.senderUnsentBuffer > 0) {
+                 addLog('sys', `收到ACK，Nagle算法现在发送缓存的数据。`);
+                 sendDataSegment();
+            } else {
+                 state.isSimulating = false;
+                 render();
+            }
+        });
+    }
+
+    function sendProbe() {
+        addLog('sys', '持续计时器超时，发送零窗口探测报文段。');
+        state.isSimulating = true;
+        render();
+        animatePacket('probe-packet', 'Probe (1B)', 'data').then(() => {
+            addLog('receive', '接收方收到探测报文。');
+            sendAck(); // The ACK will contain the current window
+        });
+    }
+
+    // --- Event Handlers ---
+    elements.sendDataBtn.addEventListener('click', () => {
+        const dataToWrite = MSS;
+        if ((state.lastByteAcked + state.senderUnsentBuffer + dataToWrite) > MAX_BUFFER_SIZE) return;
+        
+        state.senderUnsentBuffer += dataToWrite;
+        addLog('send', `应用向TCP发送缓存写入 ${dataToWrite} B数据。`);
+        
+        const flightSize = state.lastByteSent - state.lastByteAcked;
+        if (state.nagleEnabled) {
+            if (flightSize === 0) {
+                sendDataSegment();
+            } else {
+                 addLog('sys', `Nagle算法生效，数据被缓存。等待ACK。`);
+            }
+        } else {
+            sendDataSegment();
+        }
+        render();
+    });
+
+    elements.readDataBtn.addEventListener('click', () => {
+        const dataToRead = Math.min(state.receiverBufferedData, MSS * 3); // Read up to 3 MSS
+        if (dataToRead <= 0) return;
+        
+        state.receiverBufferedData -= dataToRead;
+        addLog('receive', `应用从接收缓存读取了 ${dataToRead} B数据。`);
+        
+        state.isSimulating = true;
+        sendAck();
+        render();
+    });
+
+    elements.nagleToggle.addEventListener('change', (e) => {
+        state.nagleEnabled = e.target.checked;
+        addLog('sys', `Nagle算法已${state.nagleEnabled ? '启用' : '禁用'}。`);
+    });
+    
+    elements.sillyWindowToggle.addEventListener('change', (e) => {
+        state.sillyWindowEnabled = e.target.checked;
+        addLog('sys', `糊涂窗口避免机制已${state.sillyWindowEnabled ? '启用' : '禁用'}。`);
+    });
+
+    elements.resetSimBtn.addEventListener('click', resetState);
+
+    // Initial setup
+    resetState();
+});
+</script>
+
+</body>
+</html>
+

@@ -1,3 +1,4 @@
 {
-    "livePreview.defaultPreviewPath": "/CS408动态演示HTML/数据结构/最小生成树.html"
+    "livePreview.defaultPreviewPath": "/CS408动态演示HTML/数据结构/最小生成树.html",
+    "liveServer.settings.port": 5547
 }
