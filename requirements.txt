@@ -1,0 +1,14 @@
+# CS408-And-Math 项目依赖
+# 安装方式: pip install -r requirements.txt
+
+# 核心依赖
+sympy>=1.12
+plotly>=5.18
+pandas>=2.0
+numpy>=1.24
+
+# 工具脚本
+pypdf>=4.0
+python-docx>=1.0
+python-pptx>=0.6
+openpyxl>=3.1

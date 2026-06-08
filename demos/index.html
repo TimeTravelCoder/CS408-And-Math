@@ -1,0 +1,273 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS408 交互式演示中心</title>
+<style>
+  :root {
+    --ds: #1a73e8;
+    --os: #e37400;
+    --co: #0d9488;
+    --cn: #9334e6;
+    --chart: #c5221f;
+    --math: #188038;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #f1f5f9; color: #1e293b; line-height: 1.6;
+  }
+  header {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff; padding: 40px 20px; text-align: center;
+  }
+  header h1 { font-size: 2em; margin-bottom: 8px; }
+  header p { color: #94a3b8; font-size: 1.05em; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+  .section { margin-bottom: 32px; }
+  .section-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 1.35em; font-weight: 700; margin-bottom: 16px;
+    padding-bottom: 8px; border-bottom: 3px solid;
+  }
+  .ds .section-title { color: var(--ds); border-color: var(--ds); }
+  .os .section-title { color: var(--os); border-color: var(--os); }
+  .co .section-title { color: var(--co); border-color: var(--co); }
+  .cn .section-title { color: var(--cn); border-color: var(--cn); }
+  .chart .section-title { color: var(--chart); border-color: var(--chart); }
+  .math .section-title { color: var(--math); border-color: var(--math); }
+
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: 0.78em; color: #fff; font-weight: 500;
+  }
+  .badge-ds { background: var(--ds); } .badge-os { background: var(--os); }
+  .badge-co { background: var(--co); } .badge-cn { background: var(--cn); }
+  .badge-chart { background: var(--chart); } .badge-math { background: var(--math); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card {
+    display: block; background: #fff; padding: 14px 16px; border-radius: 10px;
+    text-decoration: none; color: #1e293b; border: 1px solid #e2e8f0;
+    transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card:hover {
+    transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    border-color: #94a3b8;
+  }
+  .card .title { font-weight: 600; font-size: 0.98em; margin-bottom: 2px; }
+  .card .path { font-size: 0.78em; color: #94a3b8; }
+  .subgroup { margin-bottom: 20px; }
+  .subgroup h4 { font-size: 0.92em; color: #64748b; margin-bottom: 8px; padding-left: 4px; }
+  .count { font-size: 0.82em; color: #94a3b8; font-weight: 400; }
+
+  footer {
+    text-align: center; padding: 30px; color: #94a3b8; font-size: 0.85em;
+    border-top: 1px solid #e2e8f0; margin-top: 20px;
+  }
+
+  @media (max-width: 600px) {
+    header h1 { font-size: 1.4em; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📚 CS408 交互式演示中心</h1>
+  <p>数据结构 · 操作系统 · 计算机组成原理 · 计算机网络 · 数学</p>
+</header>
+
+<div class="container">
+
+  <!-- ====== 数据结构 ====== -->
+  <div class="section ds">
+    <div class="section-title">
+      <span>🔢 数据结构</span><span class="badge badge-ds">10 个演示</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="数据结构/最小生成树.html"><div class="title">最小生成树 (Prim & Kruskal)</div><div class="path">数据结构/最小生成树.html</div></a>
+      <a class="card" href="数据结构/寻找生成树.html"><div class="title">寻找生成树</div><div class="path">数据结构/寻找生成树.html</div></a>
+      <a class="card" href="数据结构/广度优先遍历.html"><div class="title">广度优先遍历 (BFS)</div><div class="path">数据结构/广度优先遍历.html</div></a>
+      <a class="card" href="数据结构/深度优先遍历.html"><div class="title">深度优先遍历 (DFS)</div><div class="path">数据结构/深度优先遍历.html</div></a>
+      <a class="card" href="数据结构/哈希表开放寻址.html"><div class="title">哈希表开放寻址</div><div class="path">数据结构/哈希表开放寻址.html</div></a>
+      <a class="card" href="数据结构/线索二叉树.html"><div class="title">线索二叉树</div><div class="path">数据结构/线索二叉树.html</div></a>
+      <a class="card" href="数据结构/线序二叉树.html"><div class="title">线序二叉树</div><div class="path">数据结构/线序二叉树.html</div></a>
+      <a class="card" href="数据结构/队列.html"><div class="title">队列</div><div class="path">数据结构/队列.html</div></a>
+      <a class="card" href="数据结构/递归解密.html"><div class="title">递归解密</div><div class="path">数据结构/递归解密.html</div></a>
+      <a class="card" href="数据结构/1.html"><div class="title">数据结构演示 #1</div><div class="path">数据结构/1.html</div></a>
+    </div>
+  </div>
+
+  <!-- ====== 计算机操作系统 ====== -->
+  <div class="section os">
+    <div class="section-title">
+      <span>💻 计算机操作系统</span><span class="badge badge-os">29 个演示</span>
+    </div>
+
+    <div class="subgroup"><h4>处理器调度</h4>
+    <div class="grid">
+      <a class="card" href="计算机操作系统/处理器调度/进程调度.html"><div class="title">进程调度</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/作业与作业调度.html"><div class="title">作业与作业调度</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/处理器调度目标.html"><div class="title">处理器调度目标</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/实时调度.html"><div class="title">实时调度</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/死锁概念.html"><div class="title">死锁概念</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/死锁预防.html"><div class="title">死锁预防</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/避免死锁.html"><div class="title">避免死锁</div></a>
+      <a class="card" href="计算机操作系统/处理器调度/死锁的检测与解除.html"><div class="title">死锁的检测与解除</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>存储器管理</h4>
+    <div class="grid">
+      <a class="card" href="计算机操作系统/存储器管理/程序的装入与链接.html"><div class="title">程序的装入与链接</div></a>
+      <a class="card" href="计算机操作系统/存储器管理/连续分配存储管理方式.html"><div class="title">连续分配存储管理</div></a>
+      <a class="card" href="计算机操作系统/存储器管理/分页存储管理方式.html"><div class="title">分页存储管理</div></a>
+      <a class="card" href="计算机操作系统/存储器管理/分段存储管理方式.html"><div class="title">分段存储管理</div></a>
+      <a class="card" href="计算机操作系统/存储器管理/对换 (Swapping).html"><div class="title">对换 (Swapping)</div></a>
+      <a class="card" href="计算机操作系统/存储器管理/伙伴系统.html"><div class="title">伙伴系统</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>虚拟存储器</h4>
+    <div class="grid">
+      <a class="card" href="计算机操作系统/虚拟存储器/页面算法模拟器.html"><div class="title">页面算法模拟器</div></a>
+      <a class="card" href="计算机操作系统/虚拟存储器/请求分页管理.html"><div class="title">请求分页管理</div></a>
+      <a class="card" href="计算机操作系统/虚拟存储器/请求分段存储管理.html"><div class="title">请求分段存储管理</div></a>
+      <a class="card" href="计算机操作系统/虚拟存储器/虚拟存储器・交互式指南.html"><div class="title">虚拟存储器·交互式指南</div></a>
+      <a class="card" href="计算机操作系统/虚拟存储器/虚拟存储器・学习中心.html"><div class="title">虚拟存储器·学习中心</div></a>
+      <a class="card" href="计算机操作系统/虚拟存储器/“‘抖动’与工作集.html"><div class="title">"抖动"与工作集</div></a>
+      <a class="card" href="计算机操作系统/虚拟存储器/1.html"><div class="title">虚拟存储器演示 #1</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>磁盘与文件系统</h4>
+    <div class="grid">
+      <a class="card" href="计算机操作系统/磁盘I/O提速技术探索.html"><div class="title">磁盘 I/O 提速技术</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/外存的组织方式.html"><div class="title">外存的组织方式</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/文件系统.html"><div class="title">文件系统</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/文件目录.html"><div class="title">文件目录</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/文件的逻辑结构.html"><div class="title">文件的逻辑结构</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/文件存储系统管理.html"><div class="title">文件存储系统管理</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/文件共享.html"><div class="title">文件共享</div></a>
+      <a class="card" href="计算机操作系统/磁盘I/文件保护.html"><div class="title">文件保护</div></a>
+    </div></div>
+  </div>
+
+  <!-- ====== 计算机组成原理 ====== -->
+  <div class="section co">
+    <div class="section-title">
+      <span>🔧 计算机组成原理</span><span class="badge badge-co">8 个演示</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="计算机组成原理/存储系统/cache.html"><div class="title">Cache 高速缓存</div></a>
+      <a class="card" href="计算机组成原理/存储系统/cache原理.html"><div class="title">Cache 原理详解</div></a>
+      <a class="card" href="计算机组成原理/存储系统/动态演示：CPU与主存的连接.html"><div class="title">CPU 与主存的连接</div></a>
+      <a class="card" href="计算机组成原理/存储系统/动态演示：DRAM 位平面与数据读取.html"><div class="title">DRAM 位平面与数据读取</div></a>
+      <a class="card" href="计算机组成原理/存储系统/动态演示：DRAM 刷新周期.html"><div class="title">DRAM 刷新周期</div></a>
+      <a class="card" href="计算机组成原理/存储系统/动态演示：四体并行低位交叉存储器.html"><div class="title">四体并行低位交叉存储器</div></a>
+      <a class="card" href="计算机组成原理/存储系统/突发传输.html"><div class="title">突发传输</div></a>
+      <a class="card" href="计算机组成原理/存储系统/行缓冲器.html"><div class="title">行缓冲器 (Row Buffer)</div></a>
+    </div>
+  </div>
+
+  <!-- ====== 计算机网络 ====== -->
+  <div class="section cn">
+    <div class="section-title">
+      <span>🌐 计算机网络</span><span class="badge badge-cn">32 个演示</span>
+    </div>
+
+    <div class="subgroup"><h4>概述与协议栈</h4>
+    <div class="grid">
+      <a class="card" href="计算机网络/概述.html"><div class="title">计算机网络概述</div></a>
+      <a class="card" href="计算机网络/计算机网络协议栈演示.html"><div class="title">协议栈演示</div></a>
+      <a class="card" href="计算机网络/交互式学习：互联网的组成.html"><div class="title">互联网的组成</div></a>
+      <a class="card" href="计算机网络/物理层交互式学习应用.html"><div class="title">物理层交互式学习</div></a>
+      <a class="card" href="计算机网络/链路层.html"><div class="title">链路层</div></a>
+      <a class="card" href="计算机网络/数据传输方式.html"><div class="title">数据传输方式</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>TCP / UDP 传输层</h4>
+    <div class="grid">
+      <a class="card" href="计算机网络/TCP运输链接管理动画演示.html"><div class="title">TCP 运输链接管理</div></a>
+      <a class="card" href="计算机网络/TCP运输链接管理动画演示 UI.html"><div class="title">TCP 链接管理 (UI版)</div></a>
+      <a class="card" href="计算机网络/TCP可靠传输的实现.html"><div class="title">TCP 可靠传输的实现</div></a>
+      <a class="card" href="计算机网络/TCP流量控制.html"><div class="title">TCP 流量控制</div></a>
+      <a class="card" href="计算机网络/TCP的拥塞控制动画演示.html"><div class="title">TCP 拥塞控制</div></a>
+      <a class="card" href="计算机网络/传输层可靠传输动画演示.html"><div class="title">传输层可靠传输</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>网络层与路由</h4>
+    <div class="grid">
+      <a class="card" href="计算机网络/RIP协议.html"><div class="title">RIP 协议</div></a>
+      <a class="card" href="计算机网络/路由交换协议动画演示.html"><div class="title">路由交换协议</div></a>
+      <a class="card" href="计算机网络/IP多播交互式模拟器.html"><div class="title">IP 多播模拟器</div></a>
+      <a class="card" href="计算机网络/VPN 与 NAT 交互式模拟器.html"><div class="title">VPN 与 NAT</div></a>
+      <a class="card" href="计算机网络/交互式学习：DHCP 协议.html"><div class="title">DHCP 协议</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>应用层</h4>
+    <div class="grid">
+      <a class="card" href="计算机网络/交互式学习：域名系统 DNS.html"><div class="title">域名系统 DNS</div></a>
+      <a class="card" href="计算机网络/交互式学习：万维网WWW.html"><div class="title">万维网 WWW</div></a>
+      <a class="card" href="计算机网络/交互式学习：文件传送协议.html"><div class="title">文件传送协议 FTP</div></a>
+      <a class="card" href="计算机网络/交互式学习：电子邮件系统.html"><div class="title">电子邮件系统</div></a>
+      <a class="card" href="计算机网络/交互式学习：P2P 应用.html"><div class="title">P2P 应用</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>无线与移动网络</h4>
+    <div class="grid">
+      <a class="card" href="计算机网络/交互式WLAN学习应用.html"><div class="title">WLAN 学习应用</div></a>
+      <a class="card" href="计算机网络/无线局域网(WLAN)交互式探索指南.html"><div class="title">WLAN 交互式探索指南</div></a>
+      <a class="card" href="计算机网络/CA 碰撞避免机制.html"><div class="title">CA 碰撞避免机制</div></a>
+      <a class="card" href="计算机网络/MAC帧转发过程动画演示.html"><div class="title">MAC 帧转发过程</div></a>
+      <a class="card" href="计算机网络/局域网工作原理模拟器.html"><div class="title">局域网工作原理</div></a>
+      <a class="card" href="计算机网络/蜂窝移动通信网交互式核心流程指南.html"><div class="title">蜂窝移动通信网</div></a>
+      <a class="card" href="计算机网络/探索蜂窝网络的奥秘1.html"><div class="title">蜂窝网络探秘 ①</div></a>
+      <a class="card" href="计算机网络/探索蜂窝网络的奥秘2.html"><div class="title">蜂窝网络探秘 ②</div></a>
+      <a class="card" href="计算机网络/探索蜂窝网络的奥秘3.html"><div class="title">蜂窝网络探秘 ③</div></a>
+    </div></div>
+
+    <div class="subgroup"><h4>其他</h4>
+    <div class="grid">
+      <a class="card" href="计算机网络/交互式CPU调度模拟器.html"><div class="title">交互式 CPU 调度模拟器</div></a>
+      <a class="card" href="计算机网络/蜂窝移动通信网：交互式核心流程指南.html"><div class="title">蜂窝通信网 (备用)</div></a>
+    </div></div>
+  </div>
+
+  <!-- ====== 图表 ====== -->
+  <div class="section chart">
+    <div class="section-title">
+      <span>📊 图表集</span><span class="badge badge-chart">7 个</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="charts/调度算法终结对比.html"><div class="title">调度算法终结对比</div></a>
+      <a class="card" href="charts/调度示意图.html"><div class="title">调度示意图</div></a>
+      <a class="card" href="charts/CPU的并发.html"><div class="title">CPU 的并发</div></a>
+      <a class="card" href="charts/IO层次结构.html"><div class="title">I/O 层次结构</div></a>
+      <a class="card" href="charts/SPOOLing技术示意图.html"><div class="title">SPOOLing 技术示意图</div></a>
+      <a class="card" href="charts/进程互斥流程图.html"><div class="title">进程互斥流程图</div></a>
+      <a class="card" href="charts/单双工.html"><div class="title">单双工通信</div></a>
+    </div>
+  </div>
+
+  <!-- ====== 数学笔记 ====== -->
+  <div class="section math">
+    <div class="section-title">
+      <span>📐 数学笔记</span><span class="badge badge-math">3 个</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="math/数列.html"><div class="title">递推数列极限求解策略</div></a>
+      <a class="card" href="math/矢量场可视化.html"><div class="title">矢量场可视化</div></a>
+      <a class="card" href="math/端点模型.html"><div class="title">端点模型</div></a>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  CS408-And-Math 项目 · 覆盖 408 考研四门专业课 + 数学 · 共 89 个交互式演示
+</footer>
+
+</body>
+</html>
